@@ -22,7 +22,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
-    const inAuthGroup = segments[0] === 'login' || segments[0] === 'signup' || segments[0] === 'onboarding';
+    const inAuthGroup = segments[0] === 'login' || segments[0] === 'signup' || segments[0] === 'onboarding' || segments[0] === 'forgot-password' || segments[0] === 'reset-password' || segments[0] === 'verify-email' || segments[0] === 'privacy-policy';
     const isIndex = segments.length === 0 || segments[0] === undefined;
     if (!session && !inAuthGroup && !isIndex) {
       router.replace('/login');
@@ -46,7 +46,7 @@ export default function RootLayout() {
     return () => clearTimeout(t);
   }, []);
 
-  const allReady = (iconsLoaded || iconsError) && (fontsLoaded || fontsError || timedOut);
+  const allReady = (iconsLoaded || iconsError || timedOut) && (fontsLoaded || fontsError || timedOut);
 
   useEffect(() => {
     if (allReady) SplashScreen.hideAsync();
@@ -71,6 +71,10 @@ export default function RootLayout() {
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
               <Stack.Screen name="nudge" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="reset-password" options={{ animation: 'fade' }} />
+              <Stack.Screen name="forgot-password" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="verify-email" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="privacy-policy" options={{ animation: 'slide_from_right' }} />
             </Stack>
           </View>
         </AuthGuard>

@@ -1,5 +1,5 @@
 // GigOS Add Gig Form — With venue quick-pick, LocationPicker + DateField
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -9,9 +9,8 @@ import { FontFamily } from '@/src/theme/typography';
 import { Layout, Radius } from '@/src/theme/spacing';
 import { GigOSInput, PrimaryButton, SectionLabel, TagGrid, SegmentedControl, LocationPicker, DateField } from '@/src/components';
 import { MaterialIcons } from '@expo/vector-icons';
+import { GIG_TYPES_BY_ARTIST_TYPE, DEFAULT_GIG_TYPES } from '@/src/constants/artistTypes';
 
-const GIG_TYPES = ['Club Night', 'Residency', 'Private Party', 'Festival', 'Corporate', 'Brand Activation'];
-const GIG_TYPE_MAP: Record<string, string> = { 'Club Night': 'club_night', 'Residency': 'residency', 'Private Party': 'private_party', 'Festival': 'festival', 'Corporate': 'corporate', 'Brand Activation': 'brand_activation' };
 const ADV_OPTIONS = ['Not Requested', 'Requested', 'Received', 'Waived'];
 const ADV_MAP: Record<string, string> = { 'Not Requested': 'not_requested', 'Requested': 'requested', 'Received': 'received', 'Waived': 'waived' };
 
@@ -21,6 +20,7 @@ export default function AddGigScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [currency, setCurrency] = useState('INR');
+  const [artistType, setArtistType] = useState('dj');
   const [recentVenues, setRecentVenues] = useState<RecentVenue[]>([]);
   const [eventName, setEventName] = useState('');
   const [date, setDate] = useState('');
@@ -28,16 +28,17 @@ export default function AddGigScreen() {
   const [venueCountry, setVenueCountry] = useState('India');
   const [venueState, setVenueState] = useState('');
   const [venueCity, setVenueCity] = useState('');
-  const [gigType, setGigType] = useState('Club Night');
+  const [gigType, setGigType] = useState(DEFAULT_GIG_TYPES[0].label);
   const [fee, setFee] = useState('');
   const [advanceAmt, setAdvanceAmt] = useState('');
   const [advanceStatus, setAdvanceStatus] = useState('Not Requested');
   const [promoterName, setPromoterName] = useState('');
   const [promoterPhone, setPromoterPhone] = useState('');
-  const [genre, setGenre] = useState('');
   const [riderNotes, setRiderNotes] = useState('');
+  const isFirstFocusRef = useRef(true);
   const [travelNotes, setTravelNotes] = useState('');
   const [soundEngineer, setSoundEngineer] = useState('');
+  const [showMoney, setShowMoney] = useState(false);
   const [showLogistics, setShowLogistics] = useState(false);
   const [showLocation, setShowLocation] = useState(false);
   const [showPromoter, setShowPromoter] = useState(false);
@@ -48,18 +49,24 @@ export default function AddGigScreen() {
 
   const resetForm = useCallback(() => {
     setEventName(''); setDate(''); setVenueName(''); setVenueCity('');
-    setVenueState(''); setVenueCountry('India'); setGigType('Club Night');
+    setVenueState(''); setVenueCountry('India');
     setFee(''); setAdvanceAmt(''); setAdvanceStatus('Not Requested');
-    setPromoterName(''); setPromoterPhone(''); setGenre('');
+    setPromoterName(''); setPromoterPhone('');
     setRiderNotes(''); setTravelNotes(''); setSoundEngineer('');
-    setShowLogistics(false); setShowLocation(false); setShowPromoter(false);
+    setShowMoney(false); setShowLogistics(false); setShowLocation(false); setShowPromoter(false);
     setErrors({}); setConflictWarning('');
   }, []);
 
   useFocusEffect(useCallback(() => {
-    resetForm();
     getDJData().then(({ profile: p, gigs }) => {
-      if (p) setCurrency(p.currency);
+      if (p) {
+        setCurrency(p.currency);
+        const type = p.artist_type || 'dj';
+        setArtistType(type);
+        if (isFirstFocusRef.current) {
+          setGigType(GIG_TYPES_BY_ARTIST_TYPE[type]?.[0]?.label ?? DEFAULT_GIG_TYPES[0].label);
+        }
+      }
       setExistingGigs(gigs.map(g => ({ date: g.date, event_name: g.event_name })));
       const seen = new Set<string>();
       const venues: RecentVenue[] = [];
@@ -71,8 +78,9 @@ export default function AddGigScreen() {
         }
       }
       setRecentVenues(venues);
+      isFirstFocusRef.current = false;
     });
-  }, [resetForm]));
+  }, []));
 
   const handleDateChange = (d: string) => {
     setDate(d);
@@ -103,15 +111,17 @@ export default function AddGigScreen() {
         event_name: eventName, date,
         venue_name: venueName || null,
         venue_country: venueCountry || null, venue_state: venueState || null, venue_city: venueCity || null,
-        gig_type: GIG_TYPE_MAP[gigType] || 'club_night', pipeline_status: 'enquiry',
+        gig_type: GIG_TYPES_BY_ARTIST_TYPE[artistType]?.find(o => o.label === gigType)?.value ?? 'club_night',
+        pipeline_status: 'enquiry',
         fee: fee ? parseInt(fee) : null, advance_amount: advanceAmt ? parseInt(advanceAmt) : null,
         advance_status: ADV_MAP[advanceStatus] || 'not_requested',
         balance_status: 'pending',
         promoter_name: promoterName || null, promoter_phone: promoterPhone || null,
-        genre: genre || null, rider_notes: riderNotes || null, travel_notes: travelNotes || null,
+        rider_notes: riderNotes || null, travel_notes: travelNotes || null,
         sound_engineer: soundEngineer || null, is_public: false,
       });
-      // Notifications are scheduled when the user first opens the gig detail screen
+      resetForm();
+      isFirstFocusRef.current = true;
       router.back();
     } catch {
       setErrors({ save: 'Failed to save gig. Check your connection.' });
@@ -137,6 +147,7 @@ export default function AddGigScreen() {
         {/* Prominent page heading */}
         <Text style={styles.pageHeading}>Log a Booking</Text>
         <Text style={styles.pageSubtext}>Fill in the details — only event name and date are required.</Text>
+
 
         {/* ─── THE GIG ─── */}
         <View style={styles.sectionBlock}>
@@ -182,20 +193,30 @@ export default function AddGigScreen() {
           ) : null}
 
           <View style={{ marginTop: 16 }}>
-            <TagGrid options={GIG_TYPES} selected={[gigType]} onToggle={setGigType} label="GIG TYPE" single />
+            <TagGrid
+              options={(GIG_TYPES_BY_ARTIST_TYPE[artistType] ?? DEFAULT_GIG_TYPES).map(o => o.label)}
+              selected={[gigType]}
+              onToggle={setGigType}
+              label="GIG TYPE"
+              single
+            />
           </View>
         </View>
 
-        {/* ─── MONEY ─── */}
-        <View style={styles.sectionBlock}>
+        {/* ─── MONEY (collapsible) ─── */}
+        <TouchableOpacity onPress={() => setShowMoney(!showMoney)} style={styles.collapseHeader}>
           <SectionLabel>MONEY</SectionLabel>
-          <GigOSInput label="FEE AGREED" value={fee} onChangeText={setFee} keyboardType="numeric" prefix={sym} placeholder={currency === 'USD' ? '500' : '45000'} />
-          <GigOSInput label="ADVANCE AMOUNT" value={advanceAmt} onChangeText={setAdvanceAmt} keyboardType="numeric" prefix={sym} placeholder={currency === 'USD' ? '200' : '15000'} containerStyle={{ marginTop: 16 }} />
-          {fee && advanceAmt ? <Text style={styles.balanceText}>Balance due: {sym}{balance.toLocaleString()}</Text> : null}
-          <View style={{ marginTop: 16 }}>
+          {fee ? <Text style={styles.moneyPreview}>{sym}{parseInt(fee).toLocaleString()}</Text> : null}
+          <MaterialIcons name={showMoney ? 'expand-less' : 'expand-more'} size={20} color={Colors.textTertiary} />
+        </TouchableOpacity>
+        {showMoney ? (
+          <View style={[styles.sectionBlock, { gap: 16 }]}>
+            <GigOSInput label="FEE AGREED" value={fee} onChangeText={setFee} keyboardType="numeric" prefix={sym} placeholder={currency === 'USD' ? '500' : '45000'} />
+            <GigOSInput label="ADVANCE AMOUNT" value={advanceAmt} onChangeText={setAdvanceAmt} keyboardType="numeric" prefix={sym} placeholder={currency === 'USD' ? '200' : '15000'} />
+            {fee && advanceAmt ? <Text style={styles.balanceText}>Balance due: {sym}{balance.toLocaleString()}</Text> : null}
             <SegmentedControl label="ADVANCE STATUS" options={ADV_OPTIONS} value={advanceStatus} onChange={setAdvanceStatus} />
           </View>
-        </View>
+        ) : null}
 
         {/* ─── PROMOTER (collapsible) ─── */}
         <TouchableOpacity onPress={() => setShowPromoter(!showPromoter)} style={styles.collapseHeader}>
@@ -216,7 +237,6 @@ export default function AddGigScreen() {
         </TouchableOpacity>
         {showLogistics ? (
           <View style={[styles.sectionBlock, { gap: 16 }]}>
-            <GigOSInput label="GENRE" value={genre} onChangeText={setGenre} placeholder="Techno, House..." />
             <GigOSInput label="SOUND ENGINEER" value={soundEngineer} onChangeText={setSoundEngineer} placeholder="Name" />
             <GigOSInput label="RIDER NOTES" value={riderNotes} onChangeText={setRiderNotes} placeholder="CDJ-3000, DJM-900..." multiline numberOfLines={3} />
             <GigOSInput label="TRAVEL NOTES" value={travelNotes} onChangeText={setTravelNotes} placeholder="Flight details..." multiline numberOfLines={3} />
@@ -251,4 +271,5 @@ const styles = StyleSheet.create({
   errorText: { fontFamily: FontFamily.plexRegular, fontSize: 13, color: Colors.red, marginTop: 8, textAlign: 'center' },
   conflictBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, padding: 10, backgroundColor: Colors.amberDim, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.amber },
   conflictText: { fontFamily: FontFamily.plexRegular, fontSize: 12, color: Colors.amber, flex: 1, lineHeight: 18 },
+  moneyPreview: { fontFamily: FontFamily.monoRegular, fontSize: 12, color: Colors.textSecondary, flex: 1, textAlign: 'right', marginRight: 8 },
 });

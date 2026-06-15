@@ -4,13 +4,10 @@ import { View, Text, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platfor
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/src/context/AuthContext';
-import { supabase } from '@/src/lib/supabase';
 import { Colors } from '@/src/theme/colors';
 import { FontFamily } from '@/src/theme/typography';
-import { Space, Layout } from '@/src/theme/spacing';
-import { GigOSInput, PrimaryButton, SectionLabel, SegmentedControl, LocationPicker } from '@/src/components';
-
-const CURRENCIES = ['₹ INR', '$ USD'];
+import { Layout } from '@/src/theme/spacing';
+import { GigOSInput, PrimaryButton, SectionLabel } from '@/src/components';
 
 export default function SignUpScreen() {
   const insets = useSafeAreaInsets();
@@ -19,16 +16,12 @@ export default function SignUpScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [country, setCountry] = useState('India');
-  const [state, setState] = useState('');
-  const [city, setCity] = useState('');
-  const [currency, setCurrency] = useState('₹ INR');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!name || name.length < 2) e.name = 'DJ name required (min 2 chars)';
+    if (!name || name.length < 2) e.name = 'Artist name required (min 2 chars)';
     if (!email || !email.includes('@')) e.email = 'Valid email required';
     if (!password || password.length < 8) e.password = 'Minimum 8 characters';
     setErrors(e);
@@ -40,13 +33,12 @@ export default function SignUpScreen() {
     setLoading(true);
     const result = await signUp(email, password, name);
     if (result.error) { setErrors({ general: result.error }); setLoading(false); return; }
-    const curr = currency.includes('USD') ? 'USD' : 'INR';
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from('djs').update({ city, country, state: state || null, currency: curr }).eq('user_id', user.id);
-    }
     setLoading(false);
-    router.replace('/onboarding');
+    if (result.needsVerification) {
+      router.replace({ pathname: '/verify-email', params: { email: email.trim() } });
+    } else {
+      router.replace('/onboarding');
+    }
   };
 
   return (
@@ -62,18 +54,10 @@ export default function SignUpScreen() {
         </View>
         <View style={styles.form}>
           <SectionLabel>YOUR DETAILS</SectionLabel>
-          <GigOSInput label="DJ NAME" value={name} onChangeText={setName} placeholder='e.g. DJ Kohra, Sandunes, Ritviz...' autoCapitalize="words" error={errors.name} />
+          <GigOSInput label="ARTIST NAME" value={name} onChangeText={setName} placeholder='e.g. DJ Kohra, Sandunes, Ritviz...' autoCapitalize="words" error={errors.name} />
           <GigOSInput label="EMAIL" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} placeholder="you@email.com" error={errors.email} containerStyle={{ marginTop: 16 }} />
           <GigOSInput label="PASSWORD" value={password} onChangeText={setPassword} isPassword placeholder="••••••••" error={errors.password} containerStyle={{ marginTop: 16 }} />
           <Text style={styles.hint}>Minimum 8 characters</Text>
-
-          <View style={{ marginTop: 28 }}>
-            <SectionLabel>YOUR SETUP</SectionLabel>
-            <LocationPicker label="LOCATION" country={country} state={state} city={city} onChangeCountry={setCountry} onChangeState={setState} onChangeCity={setCity} />
-            <View style={{ marginTop: 16 }}>
-              <SegmentedControl label="CURRENCY" options={CURRENCIES} value={currency} onChange={setCurrency} />
-            </View>
-          </View>
 
           {errors.general ? <Text style={styles.error}>{errors.general}</Text> : null}
           <PrimaryButton title="CREATE ACCOUNT" onPress={handleSignUp} loading={loading} style={{ marginTop: 32 }} testID="signup-submit-button" />
@@ -81,6 +65,10 @@ export default function SignUpScreen() {
           <TouchableOpacity testID="go-to-login" onPress={() => router.push('/login')} style={styles.linkRow}>
             <Text style={styles.linkGray}>Already have an account? </Text>
             <Text style={styles.linkCyan}>Sign in</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/privacy-policy')} style={[styles.linkRow, { marginTop: 6 }]}>
+            <Text style={[styles.linkGray, { fontSize: 12 }]}>By signing up you agree to our </Text>
+            <Text style={[styles.linkCyan, { fontSize: 12 }]}>Privacy Policy</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

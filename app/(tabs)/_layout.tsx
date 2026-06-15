@@ -49,7 +49,7 @@ export default function TabsLayout() {
         options={{
           title: 'Income',
           tabBarTestID: 'bottom-nav-income-tab',
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ color }) => (
             <MaterialIcons name="currency-rupee" size={22} color={color} />
           ),
         }}
@@ -71,9 +71,8 @@ export default function TabsLayout() {
         name="calendar"
         options={{
           title: 'Calendar',
-          tabBarTestID: 'bottom-nav-calendar-tab',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="calendar-today" size={22} color={color} />
+          tabBarIcon: ({ color }) => (
+            <MaterialIcons name="calendar-month" size={22} color={color} />
           ),
         }}
       />

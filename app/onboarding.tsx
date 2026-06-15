@@ -1,175 +1,385 @@
-// GigOS Onboarding — 3-step flow
+// GigOS Onboarding — Profile-first flow (v2)
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import {
+  View, Text, Image, ScrollView, StyleSheet,
+  TouchableOpacity, ActivityIndicator, Alert,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons } from '@expo/vector-icons';
-import { supabase } from '@/src/lib/supabase';
-import { useAuth } from '@/src/context/AuthContext';
-import { getDJProfile, createGig } from '@/src/services/supabaseData';
+import { getDJProfile, updateDJProfile, uploadAvatar } from '@/src/services/supabaseData';
 import { storage } from '@/src/utils/storage';
 import { Colors } from '@/src/theme/colors';
 import { FontFamily } from '@/src/theme/typography';
-import { Space, Layout, Radius } from '@/src/theme/spacing';
-import { Glow } from '@/src/theme/effects';
-import { GigOSInput, PrimaryButton, SectionLabel, TagGrid, GigCard, DateField } from '@/src/components';
+import { Layout, Radius } from '@/src/theme/spacing';
+import { GigOSInput, PrimaryButton, TagGrid, LocationPicker, SegmentedControl } from '@/src/components';
+import { GENRES_BY_ARTIST_TYPE } from '@/src/constants/artistTypes';
 
-const GENRES = ['Techno', 'House', 'Psytrance', 'DnB', 'Bollywood', 'Bollytech', 'Commercial', 'Hip-Hop'];
-const GIG_TYPES = ['club_night', 'residency', 'private_party', 'festival', 'corporate', 'brand_activation'];
-const GIG_TYPE_LABELS: Record<string, string> = { club_night: 'Club Night', residency: 'Residency', private_party: 'Private', festival: 'Festival', corporate: 'Corporate', brand_activation: 'Brand' };
+const ARTIST_TYPES = [
+  { key: 'dj',           label: 'DJ' },
+  { key: 'singer',       label: 'Singer' },
+  { key: 'live_band',    label: 'Live Band' },
+  { key: 'mc',           label: 'MC / Host' },
+  { key: 'producer',     label: 'Producer' },
+  { key: 'percussionist', label: 'Percussionist' },
+];
+
+const TOTAL_STEPS = 3;
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
   const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Step 1 — Identity
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [djName, setDjName] = useState('');
-  const [currency, setCurrency] = useState('INR');
-  // Step 1
+  const [artistType, setArtistType] = useState('dj');
+
+  // Step 2 — Location + Genres + Currency
+  const [city, setCity] = useState('');
+  const [stateVal, setStateVal] = useState('');
+  const [country, setCountry] = useState('India');
   const [genres, setGenres] = useState<string[]>([]);
-  const [soundcloud, setSoundcloud] = useState('');
-  const [instagram, setInstagram] = useState('');
-  // Step 2
-  const [eventName, setEventName] = useState('');
-  const [gigDate, setGigDate] = useState('');
-  const [venue, setVenue] = useState('');
-  const [gigType, setGigType] = useState('club_night');
-  const [fee, setFee] = useState('');
-  const [advance, setAdvance] = useState('');
-  const [createdGig, setCreatedGig] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [step2Error, setStep2Error] = useState('');
+  const [currency, setCurrency] = useState('₹ INR');
+
+  // Step 3 — Rate
+  const [rateMin, setRateMin] = useState('');
+  const [rateMax, setRateMax] = useState('');
 
   useEffect(() => {
-    (async () => {
-      const profile = await getDJProfile();
-      if (profile) { setDjName(profile.name); setCurrency(profile.currency); }
-    })();
+    getDJProfile().then(p => {
+      if (!p) return;
+      setDjName(p.name || '');
+      if (p.avatar_url) setAvatarUri(p.avatar_url);
+      if (p.artist_type) setArtistType(p.artist_type);
+      if (p.city) setCity(p.city);
+      if (p.state) setStateVal(p.state);
+      if (p.country) setCountry(p.country);
+      if (p.genres?.length) setGenres(p.genres);
+      if (p.preferred_rate_min) setRateMin(p.preferred_rate_min.toString());
+      if (p.preferred_rate_max) setRateMax(p.preferred_rate_max.toString());
+      if (p.currency) setCurrency(p.currency === 'USD' ? '$ USD' : '₹ INR');
+    });
   }, []);
 
-  const toggleGenre = (g: string) => {
-    setGenres(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+  // Live profile completeness — drives the mini-bar in steps 2+
+  const completionPct = Math.round(
+    [!!avatarUri, !!djName.trim(), !!city.trim(), genres.length > 0, !!(rateMin || rateMax)]
+      .filter(Boolean).length / 5 * 100
+  );
+
+  const handlePickPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow GigOS to access your photos.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    setUploadingPhoto(true);
+    try {
+      const url = await uploadAvatar(result.assets[0].uri);
+      if (url) setAvatarUri(url);
+    } catch {
+      Alert.alert('Upload failed', 'Could not upload photo. Check your connection.');
+    }
+    setUploadingPhoto(false);
   };
 
-  const saveStep1 = async () => {
-    if (user) {
-      await supabase.from('djs').update({
-        genres, soundcloud_url: soundcloud || null, instagram_handle: instagram || null,
-      }).eq('user_id', user.id);
+  const handleStep1 = async () => {
+    if (!djName.trim()) {
+      Alert.alert('Name required', 'Enter your artist name to continue.');
+      return;
     }
+    setSaving(true);
+    await updateDJProfile({ name: djName.trim(), artist_type: artistType }).catch(() => {});
+    setSaving(false);
     setStep(2);
   };
 
-  const saveStep2 = async () => {
-    if (!eventName && !gigDate) { setStep(3); return; } // both blank = user skipping
-    if (eventName && !gigDate) { setStep2Error('Please select the gig date.'); return; }
-    if (!eventName && gigDate) { setStep2Error('Please enter the event name.'); return; }
-    setStep2Error('');
-    setLoading(true);
-    try {
-      const gig = await createGig({
-        event_name: eventName, date: gigDate, venue_name: venue || null,
-        gig_type: gigType, fee: fee ? parseInt(fee) : null,
-        advance_amount: advance ? parseInt(advance) : null,
-        advance_status: advance ? 'requested' : 'not_requested',
-        pipeline_status: 'enquiry',
-      });
-      setCreatedGig(gig);
-    } catch (e) { setStep2Error('Failed to save gig. Try again.'); setLoading(false); return; }
-    setLoading(false);
+  const handleStep2 = async () => {
+    setSaving(true);
+    await updateDJProfile({
+      city: city.trim() || null,
+      country,
+      genres,
+      currency: currency.includes('USD') ? 'USD' : 'INR',
+    }).catch(() => {});
+    setSaving(false);
     setStep(3);
   };
 
-  const finish = async () => {
-    // Write to DB so it survives reinstalls / new devices
-    if (user) {
-      await supabase.from('djs').update({ onboarding_complete: true }).eq('user_id', user.id);
-    }
-    await storage.setItem('onboarding_complete', true); // local cache for fast reads
-    router.replace('/(tabs)/pipeline');
+  const handleFinish = async () => {
+    setSaving(true);
+    await updateDJProfile({
+      preferred_rate_min: rateMin ? parseInt(rateMin) : null,
+      preferred_rate_max: rateMax ? parseInt(rateMax) : null,
+      onboarding_complete: true,
+    }).catch(() => {});
+    await storage.setItem('onboarding_complete', true);
+    setSaving(false);
+    router.replace('/(tabs)/profile');
   };
 
-  const firstName = djName.split(' ').pop() || djName;
+  // ── Shared UI ──
 
-  // Step dots
-  const Dots = () => (
-    <View style={styles.dots}>
-      {[1, 2, 3].map(i => (
-        <View key={i} style={[styles.dot, step === i ? styles.dotActive : styles.dotInactive]} />
-      ))}
+  const Progress = () => (
+    <View style={styles.progressRow}>
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${(step / TOTAL_STEPS) * 100}%` as any }]} />
+      </View>
+      <Text style={styles.progressLabel}>{step}/{TOTAL_STEPS}</Text>
     </View>
   );
 
+  const CompletenessBar = () => (
+    <View style={styles.completenessRow}>
+      <View style={styles.completenessTrack}>
+        <View style={[styles.completenessFill, { width: `${completionPct}%` as any }]} />
+      </View>
+      <Text style={styles.completenessLabel}>Profile {completionPct}%</Text>
+    </View>
+  );
+
+  // ─────────────────────────────────────────
+  // Step 1 — Photo + Name + Artist Type
+  // ─────────────────────────────────────────
   if (step === 1) return (
-    <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-      <Dots />
-      <Text style={styles.heading}>Welcome, {firstName}</Text>
-      <Text style={styles.subtext}>Tell us what you play.</Text>
-      <View style={{ marginTop: 24 }}>
-        <TagGrid options={GENRES} selected={genres} onToggle={toggleGenre} label="GENRES" />
+    <ScrollView
+      style={[styles.container, { paddingTop: insets.top + 8 }]}
+      contentContainerStyle={styles.scroll}
+      keyboardShouldPersistTaps="handled"
+    >
+      <Progress />
+
+      <Text style={styles.heading}>Your artist card.</Text>
+      <Text style={styles.subtext}>Set up your profile — the heart of GigOS.</Text>
+
+      <TouchableOpacity
+        style={styles.photoPicker}
+        onPress={handlePickPhoto}
+        disabled={uploadingPhoto}
+        activeOpacity={0.8}
+      >
+        {avatarUri
+          ? <Image source={{ uri: avatarUri }} style={styles.photoImage} />
+          : (
+            <View style={styles.photoPlaceholder}>
+              {uploadingPhoto
+                ? <ActivityIndicator color={Colors.cyan} />
+                : (
+                  <>
+                    <MaterialIcons name="add-a-photo" size={30} color={Colors.cyan} />
+                    <Text style={styles.photoHintText}>Add photo</Text>
+                  </>
+                )
+              }
+            </View>
+          )
+        }
+        {avatarUri && !uploadingPhoto ? (
+          <View style={styles.photoEditBadge}>
+            <MaterialIcons name="camera-alt" size={13} color="#fff" />
+          </View>
+        ) : null}
+      </TouchableOpacity>
+
+      <GigOSInput
+        label="ARTIST NAME"
+        value={djName}
+        onChangeText={setDjName}
+        placeholder="e.g. DJ Sharma, Arjun Live, MC Ravi..."
+        containerStyle={{ marginTop: 28 }}
+      />
+
+      <Text style={styles.fieldLabel}>ARTIST TYPE</Text>
+      <View style={styles.chipGrid}>
+        {ARTIST_TYPES.map(t => (
+          <TouchableOpacity
+            key={t.key}
+            style={[styles.chip, artistType === t.key && styles.chipActive]}
+            onPress={() => setArtistType(t.key)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.chipText, artistType === t.key && styles.chipTextActive]}>
+              {t.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
-      <GigOSInput label="SOUNDCLOUD / MIXCLOUD" value={soundcloud} onChangeText={setSoundcloud} placeholder="soundcloud.com/yourname" containerStyle={{ marginTop: 24 }} />
-      <GigOSInput label="INSTAGRAM" value={instagram} onChangeText={setInstagram} placeholder="yourhandle" prefix="@" containerStyle={{ marginTop: 16 }} />
-      <PrimaryButton title="NEXT →" onPress={saveStep1} style={{ marginTop: 32 }} />
-      <TouchableOpacity onPress={() => setStep(2)} style={styles.skipBtn}><Text style={styles.skipText}>Skip for now</Text></TouchableOpacity>
+
+      <PrimaryButton title="NEXT →" onPress={handleStep1} loading={saving} style={{ marginTop: 36 }} />
     </ScrollView>
   );
 
+  // ─────────────────────────────────────────
+  // Step 2 — City + Genres
+  // ─────────────────────────────────────────
   if (step === 2) return (
-    <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-      <Dots />
-      <Text style={styles.heading}>Drop your next gig.</Text>
-      <Text style={styles.subtext}>See your pipeline come alive.</Text>
-      <GigOSInput label="EVENT NAME" value={eventName} onChangeText={setEventName} placeholder="e.g. TRYST Saturday" containerStyle={{ marginTop: 24 }} />
-      <View style={{ marginTop: 16 }}><DateField label="DATE" value={gigDate} onChange={setGigDate} placeholder="Select gig date" /></View>
-      <GigOSInput label="VENUE" value={venue} onChangeText={setVenue} placeholder="e.g. Kitty Su, Mumbai" containerStyle={{ marginTop: 16 }} />
-      <View style={{ marginTop: 16 }}>
-        <TagGrid options={GIG_TYPES.map(t => GIG_TYPE_LABELS[t])} selected={[GIG_TYPE_LABELS[gigType]]} onToggle={(label) => {
-          const entry = Object.entries(GIG_TYPE_LABELS).find(([, v]) => v === label);
-          if (entry) setGigType(entry[0]);
-        }} label="GIG TYPE" single />
+    <ScrollView
+      style={[styles.container, { paddingTop: insets.top + 8 }]}
+      contentContainerStyle={styles.scroll}
+      keyboardShouldPersistTaps="handled"
+    >
+      <Progress />
+      <CompletenessBar />
+
+      <Text style={styles.heading}>Where do you perform?</Text>
+      <Text style={styles.subtext}>Your base and the genres you play.</Text>
+
+      <View style={{ marginTop: 24 }}>
+        <LocationPicker
+          country={country}
+          state={stateVal}
+          city={city}
+          onChangeCountry={setCountry}
+          onChangeState={setStateVal}
+          onChangeCity={setCity}
+          hideState
+        />
       </View>
-      <GigOSInput label="FEE" value={fee} onChangeText={setFee} keyboardType="numeric" prefix={currency === 'USD' ? '$' : '₹'} placeholder={currency === 'USD' ? '500' : '40000'} containerStyle={{ marginTop: 16 }} />
-      <GigOSInput label="ADVANCE" value={advance} onChangeText={setAdvance} keyboardType="numeric" prefix={currency === 'USD' ? '$' : '₹'} placeholder={currency === 'USD' ? '200' : '15000'} containerStyle={{ marginTop: 16 }} />
-      {fee && advance ? (
-        <Text style={styles.balancePreview}>Balance due: {currency === 'USD' ? '$' : '₹'}{(parseInt(fee || '0') - parseInt(advance || '0')).toLocaleString()}</Text>
-      ) : null}
-      {step2Error ? <Text style={styles.errorText}>{step2Error}</Text> : null}
-      <PrimaryButton title="ADD TO PIPELINE →" onPress={saveStep2} loading={loading} style={{ marginTop: 16 }} />
-      <TouchableOpacity onPress={() => setStep(3)} style={styles.skipBtn}><Text style={styles.skipText}>Skip for now</Text></TouchableOpacity>
+
+      <View style={{ marginTop: 20 }}>
+        <SegmentedControl
+          options={['₹ INR', '$ USD']}
+          value={currency}
+          onChange={setCurrency}
+          label="CURRENCY"
+        />
+      </View>
+
+      <View style={{ marginTop: 28 }}>
+        <TagGrid
+          options={GENRES_BY_ARTIST_TYPE[artistType] ?? GENRES_BY_ARTIST_TYPE.dj}
+          selected={genres}
+          onToggle={(g) => setGenres(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g])}
+          label="GENRES YOU PLAY"
+        />
+      </View>
+
+      <PrimaryButton title="NEXT →" onPress={handleStep2} loading={saving} style={{ marginTop: 36 }} />
+      <TouchableOpacity onPress={() => setStep(3)} style={styles.skipBtn}>
+        <Text style={styles.skipText}>Skip for now</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 
-  // Step 3 — Celebration
+  // ─────────────────────────────────────────
+  // Step 3 — Rate + Socials
+  // ─────────────────────────────────────────
   return (
-    <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={[styles.scroll, { alignItems: 'center', justifyContent: 'center', minHeight: 500 }]}>
-      <View style={[styles.checkCircle, Glow.cyan]}>
-        <MaterialIcons name="check" size={48} color={Colors.textOnAccent} />
+    <ScrollView
+      style={[styles.container, { paddingTop: insets.top + 8 }]}
+      contentContainerStyle={styles.scroll}
+      keyboardShouldPersistTaps="handled"
+    >
+      <Progress />
+      <CompletenessBar />
+
+      <Text style={styles.heading}>Set your rate.</Text>
+      <Text style={styles.subtext}>Keep your rate handy for every booking chat.</Text>
+
+      <View style={styles.rateRow}>
+        <GigOSInput
+          label={`MIN FEE (${currency.includes('USD') ? '$' : '₹'})`}
+          value={rateMin}
+          onChangeText={setRateMin}
+          keyboardType="numeric"
+          prefix={currency.includes('USD') ? '$' : '₹'}
+          placeholder="25,000"
+          containerStyle={{ flex: 1 }}
+        />
+        <GigOSInput
+          label={`MAX FEE (${currency.includes('USD') ? '$' : '₹'})`}
+          value={rateMax}
+          onChangeText={setRateMax}
+          keyboardType="numeric"
+          prefix={currency.includes('USD') ? '$' : '₹'}
+          placeholder="1,50,000"
+          containerStyle={{ flex: 1 }}
+        />
       </View>
-      <Text style={[styles.heading, { textAlign: 'center', marginTop: 24 }]}>You're in the system.</Text>
-      {createdGig ? (
-        <View style={{ width: '100%', marginTop: 32 }}>
-          <GigCard gigName={createdGig.event_name} date={createdGig.date} venueName={createdGig.venue_name} gigType={createdGig.gig_type} fee={createdGig.fee} currency={currency} advanceStatus={createdGig.advance_status} advanceAmount={createdGig.advance_amount} pipelineStatus={createdGig.pipeline_status} />
-        </View>
-      ) : null}
-      <Text style={[styles.subtext, { marginTop: 16 }]}>Your pipeline is live.</Text>
-      <PrimaryButton title="GO TO PIPELINE" onPress={finish} style={{ marginTop: 32, width: '100%' }} />
+
+      <PrimaryButton
+        title="GO TO MY PROFILE →"
+        onPress={handleFinish}
+        loading={saving}
+        style={{ marginTop: 36 }}
+      />
+      <TouchableOpacity onPress={handleFinish} style={styles.skipBtn}>
+        <Text style={styles.skipText}>Skip and go to profile</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surfaceApp },
-  scroll: { paddingHorizontal: Layout.screenGutter, paddingBottom: 40 },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingTop: 20, marginBottom: 32 },
-  dot: { height: 8, borderRadius: 4 },
-  dotActive: { width: 24, backgroundColor: Colors.cyan },
-  dotInactive: { width: 8, backgroundColor: Colors.surfaceCard },
+  scroll: { paddingHorizontal: Layout.screenGutter, paddingBottom: 52 },
+
+  // Step progress bar
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 8, marginBottom: 28 },
+  progressTrack: { flex: 1, height: 3, backgroundColor: Colors.surfaceCard, borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: 3, backgroundColor: Colors.cyan, borderRadius: 2 },
+  progressLabel: { fontFamily: FontFamily.monoMedium, fontSize: 10, color: Colors.textTertiary, letterSpacing: 0.5 },
+
+  // Live completeness bar
+  completenessRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+  completenessTrack: { flex: 1, height: 2, backgroundColor: Colors.surfaceCard, borderRadius: 1, overflow: 'hidden' },
+  completenessFill: { height: 2, backgroundColor: Colors.cyan, borderRadius: 1 },
+  completenessLabel: { fontFamily: FontFamily.monoMedium, fontSize: 10, color: Colors.cyan, letterSpacing: 0.3 },
+
   heading: { fontFamily: FontFamily.sairaBold, fontSize: 26, color: Colors.textPrimary },
-  subtext: { fontFamily: FontFamily.plexRegular, fontSize: 15, color: Colors.textSecondary, marginTop: 4 },
-  balancePreview: { fontFamily: FontFamily.monoRegular, fontSize: 12, color: Colors.textSecondary, marginTop: 8 },
-  skipBtn: { alignItems: 'center', marginTop: 12, paddingVertical: 8 },
+  subtext: { fontFamily: FontFamily.plexRegular, fontSize: 15, color: Colors.textSecondary, marginTop: 6, lineHeight: 22 },
+
+  // Photo picker
+  photoPicker: { alignSelf: 'center', marginTop: 24, position: 'relative' },
+  photoImage: { width: 100, height: 100, borderRadius: 50, borderWidth: 2.5, borderColor: Colors.cyan },
+  photoPlaceholder: {
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: Colors.surfaceCard,
+    borderWidth: 2, borderColor: Colors.cyan,
+    alignItems: 'center', justifyContent: 'center', gap: 6,
+  },
+  photoHintText: { fontFamily: FontFamily.plexRegular, fontSize: 10, color: Colors.cyan },
+  photoEditBadge: {
+    position: 'absolute', bottom: 2, right: 2,
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: Colors.cyan,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: Colors.surfaceApp,
+  },
+
+  fieldLabel: {
+    fontFamily: FontFamily.monoMedium, fontSize: 10, letterSpacing: 1.4,
+    color: Colors.textTertiary, textTransform: 'uppercase',
+    marginTop: 24, marginBottom: 10,
+  },
+
+  // Artist type chips
+  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 14, paddingVertical: 9,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surfaceCard,
+    borderWidth: 1, borderColor: Colors.borderDefault,
+  },
+  chipActive: { backgroundColor: 'rgba(24,200,230,0.10)', borderColor: Colors.cyan },
+  chipText: { fontFamily: FontFamily.plexRegular, fontSize: 14, color: Colors.textSecondary },
+  chipTextActive: { fontFamily: FontFamily.sairaSemiBold, fontSize: 14, color: Colors.cyan },
+
+  // Rate fields
+  rateRow: { flexDirection: 'row', gap: 12, marginTop: 24 },
+
+  skipBtn: { alignItems: 'center', marginTop: 12, paddingVertical: 10 },
   skipText: { fontFamily: FontFamily.plexRegular, fontSize: 13, color: Colors.textTertiary },
-  errorText: { fontFamily: FontFamily.plexRegular, fontSize: 13, color: Colors.red, marginTop: 12, textAlign: 'center' },
-  checkCircle: { width: 120, height: 120, borderRadius: 60, backgroundColor: Colors.cyan, alignItems: 'center', justifyContent: 'center' },
 });

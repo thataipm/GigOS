@@ -1,5 +1,5 @@
 // GigOS Pipeline — List view with collapsible sections
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -12,11 +12,11 @@ import { Glow } from '@/src/theme/effects';
 import { MaterialIcons } from '@expo/vector-icons';
 
 const COLUMNS = [
-  { key: 'enquiry', label: 'ENQUIRY' },
-  { key: 'confirmed', label: 'CONFIRMED' },
+  { key: 'enquiry',          label: 'ENQUIRY' },
+  { key: 'confirmed',        label: 'CONFIRMED' },
   { key: 'advance_received', label: 'ADVANCE IN' },
-  { key: 'done', label: 'DONE' },
-  { key: 'paid', label: 'PAID' },
+  { key: 'done',             label: 'DONE' },
+  { key: 'paid',             label: 'PAID' },
 ].map(c => ({ ...c, color: StatusColors[c.key as StatusKey]?.fg ?? Colors.textTertiary }));
 
 const FILTERS = ['All', 'This Week', 'This Month', 'Enquiries'];
@@ -29,6 +29,8 @@ function getGreeting(): string {
 export default function PipelineScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const autoCollapsedRef = useRef(false);
+
   const [profile, setProfile] = useState<DJProfile | null>(null);
   const [gigs, setGigs] = useState<Gig[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +43,12 @@ export default function PipelineScreen() {
     try {
       const { profile: p, gigs: g } = await getDJData();
       setProfile(p); setGigs(g); setError('');
+      // Auto-collapse empty pipeline stages once on first load
+      if (!autoCollapsedRef.current) {
+        autoCollapsedRef.current = true;
+        const occupied = new Set(g.map(gig => gig.pipeline_status));
+        setCollapsed(new Set(COLUMNS.map(c => c.key).filter(k => !occupied.has(k))));
+      }
     } catch {
       setError('Could not load your gigs. Pull down to retry.');
     } finally {
@@ -55,7 +63,6 @@ export default function PipelineScreen() {
     (g.advance_status === 'requested' || g.advance_status === 'not_requested') &&
     g.pipeline_status !== 'paid'
   );
-  // Fixed: only count advance_amount (not fee) as the actual amount being chased
   const pendingTotal = pendingAdvances.reduce((sum, g) => sum + (g.advance_amount ?? 0), 0);
 
   const filteredGigs = gigs.filter(g => {
@@ -74,12 +81,26 @@ export default function PipelineScreen() {
 
   const djName = profile?.name?.split(' ').pop() || 'DJ';
   const currency = profile?.currency || 'INR';
-  const todayStr = new Date().toISOString().split('T')[0];
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
   const tonightGigs = filteredGigs.filter(g => g.date === todayStr);
 
   const toggleCollapse = (key: string) => {
     setCollapsed(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
   };
+
+  const nudgeCount = useMemo(() => {
+    const now = new Date();
+    const venueMap: Record<string, Gig[]> = {};
+    gigs.forEach(g => { if (g.venue_name) { (venueMap[g.venue_name] = venueMap[g.venue_name] || []).push(g); } });
+    return Object.values(venueMap).filter(vGigs => {
+      const sorted = [...vGigs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const latest = sorted[0];
+      const weeksAgo = Math.floor((now.getTime() - new Date(latest.date).getTime()) / (7 * 86400000));
+      const hasFuture = vGigs.some(g => new Date(g.date) > now);
+      return weeksAgo >= 6 && !hasFuture && !!latest.promoter_name;
+    }).length;
+  }, [gigs]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -90,10 +111,15 @@ export default function PipelineScreen() {
           <Text style={styles.djName}>{djName}</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <TouchableOpacity testID="nudge-bell" onPress={() => router.push('/nudge')}>
+          <TouchableOpacity testID="nudge-bell" onPress={() => router.push('/nudge')} style={{ position: 'relative' }}>
             <MaterialIcons name="notifications-none" size={22} color={Colors.textSecondary} />
+            {nudgeCount > 0 ? (
+              <View style={styles.nudgeBadge}>
+                <Text style={styles.nudgeBadgeText}>{nudgeCount > 9 ? '9+' : nudgeCount}</Text>
+              </View>
+            ) : null}
           </TouchableOpacity>
-          <TouchableOpacity testID="profile-avatar" onPress={() => router.push('/settings')} style={styles.avatar}>
+          <TouchableOpacity testID="profile-avatar" onPress={() => router.push('/(tabs)/profile')} style={styles.avatar}>
             <Text style={styles.avatarText}>{djName.charAt(0).toUpperCase()}</Text>
           </TouchableOpacity>
         </View>
@@ -134,6 +160,7 @@ export default function PipelineScreen() {
         </ScrollView>
 
         {loading ? (
+          /* ── Pipeline list view ── */
           <PipelineSkeleton />
         ) : gigs.length === 0 ? (
           <View style={styles.empty}>
@@ -255,4 +282,6 @@ const styles = StyleSheet.create({
   emptySubtext: { fontFamily: FontFamily.plexRegular, fontSize: 15, color: Colors.textSecondary },
   emptyBtn: { backgroundColor: Colors.cyan, borderRadius: Radius.md, paddingHorizontal: 24, paddingVertical: 14, marginTop: 16 },
   emptyBtnText: { fontFamily: FontFamily.sairaBold, fontSize: 15, color: Colors.textOnAccent },
+  nudgeBadge: { position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: Colors.red, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  nudgeBadgeText: { fontFamily: FontFamily.monoMedium, fontSize: 9, color: '#fff' },
 });

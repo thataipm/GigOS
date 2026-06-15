@@ -2,12 +2,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
+import { initRevenueCat } from '@/src/services/purchaseService';
 
 type AuthContextValue = {
   session: Session | null;
   user: User | null;
   loading: boolean;
-  signUp: (email: string, password: string, name: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string, name: string) => Promise<{ error: string | null; needsVerification: boolean }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 };
@@ -28,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session?.user) initRevenueCat(session.user.id);
     });
 
     return () => subscription.unsubscribe();
@@ -39,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password,
       options: { data: { name } },
     });
-    if (error) return { error: error.message };
+    if (error) return { error: error.message, needsVerification: false };
     // Update DJ profile name if auto-created by trigger
     if (data.user) {
       await supabase
@@ -47,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .update({ name })
         .eq('user_id', data.user.id);
     }
-    return { error: null };
+    return { error: null, needsVerification: !data.session };
   };
 
   const signIn = async (email: string, password: string) => {

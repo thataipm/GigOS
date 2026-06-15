@@ -1,39 +1,88 @@
-// GigOS Paywall — Pro Upgrade Screen
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+// GigOS Paywall — Pro Upgrade Screen with RevenueCat
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/src/theme/colors';
 import { FontFamily } from '@/src/theme/typography';
-import { Space, Layout, Radius } from '@/src/theme/spacing';
+import { Layout, Radius } from '@/src/theme/spacing';
 import { Glow } from '@/src/theme/effects';
 import { PrimaryButton, SegmentedControl } from '@/src/components';
 import { MaterialIcons } from '@expo/vector-icons';
+import { getOfferings, purchasePackage, restorePurchases } from '@/src/services/purchaseService';
+import type { PurchasesPackage } from 'react-native-purchases';
 
 const FEATURES = [
   'Unlimited gigs — no cap',
+  'Unlimited expense tracking',
   'Full income history + stream breakdown',
-  'CSV export for your CA',
+  'Unlimited invoice generation',
   'Follow-up nudge reminders',
   'Verified public profile',
-  'Calendar sync',
 ];
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [plan, setPlan] = useState('Monthly');
-  const [toastVisible, setToastVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [monthlyPackage, setMonthlyPackage] = useState<PurchasesPackage | null>(null);
+  const [annualPackage, setAnnualPackage] = useState<PurchasesPackage | null>(null);
 
-  const handleUpgrade = () => {
-    setToastVisible(true);
-    setTimeout(() => setToastVisible(false), 3000);
+  useEffect(() => {
+    getOfferings().then(offerings => {
+      const current = offerings?.current;
+      if (!current) return;
+      for (const pkg of current.availablePackages) {
+        const id = pkg.product.identifier;
+        if (id.includes('monthly')) setMonthlyPackage(pkg);
+        if (id.includes('yearly') || id.includes('annual')) setAnnualPackage(pkg);
+      }
+    });
+  }, []);
+
+  const selectedPackage = plan === 'Monthly' ? monthlyPackage : annualPackage;
+  const monthlyPrice = monthlyPackage?.product.priceString ?? '₹499';
+  const annualPrice = annualPackage?.product.priceString ?? '₹3,999';
+  const displayPrice = plan === 'Monthly' ? monthlyPrice : annualPrice;
+
+  const handleUpgrade = async () => {
+    if (!selectedPackage) {
+      Alert.alert('Coming Soon', 'Pro subscriptions are launching very soon. We\'ll notify you!');
+      return;
+    }
+    setLoading(true);
+    const result = await purchasePackage(selectedPackage);
+    setLoading(false);
+    if (result.success) {
+      Alert.alert('Welcome to Pro! 🎉', 'Your GigOS Pro subscription is now active.', [
+        { text: 'Let\'s go', onPress: () => router.back() },
+      ]);
+    } else if (!result.cancelled) {
+      Alert.alert('Purchase failed', 'Something went wrong. Please try again or restore purchases.');
+    }
+  };
+
+  const handleRestore = async () => {
+    setRestoring(true);
+    const isPro = await restorePurchases();
+    setRestoring(false);
+    if (isPro) {
+      Alert.alert('Restored!', 'Your Pro subscription has been restored.', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+    } else {
+      Alert.alert('No subscription found', 'No active Pro subscription found for this account.');
+    }
   };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.nav}>
-        <TouchableOpacity testID="back-paywall" onPress={() => router.back()}><MaterialIcons name="chevron-left" size={28} color={Colors.cyan} /></TouchableOpacity>
+        <TouchableOpacity testID="back-paywall" onPress={() => router.back()}>
+          <MaterialIcons name="chevron-left" size={28} color={Colors.cyan} />
+        </TouchableOpacity>
         <Text style={styles.navTitle}>Go Pro</Text>
         <View style={{ width: 28 }} />
       </View>
@@ -52,7 +101,9 @@ export default function PaywallScreen() {
         <View style={styles.featureList}>
           {FEATURES.map(f => (
             <View key={f} style={styles.featureRow}>
-              <View style={styles.checkCircle}><MaterialIcons name="check" size={14} color={Colors.cyan} /></View>
+              <View style={styles.checkCircle}>
+                <MaterialIcons name="check" size={14} color={Colors.cyan} />
+              </View>
               <Text style={styles.featureText}>{f}</Text>
             </View>
           ))}
@@ -61,28 +112,40 @@ export default function PaywallScreen() {
         {/* Pricing */}
         <View style={styles.pricingSection}>
           <SegmentedControl options={['Monthly', 'Annual']} value={plan} onChange={setPlan} />
-          {plan === 'Annual' ? <View style={styles.saveBadge}><Text style={styles.saveText}>Save 17%</Text></View> : null}
+          {plan === 'Annual' ? (
+            <View style={styles.saveBadge}>
+              <Text style={styles.saveText}>Save ~33%</Text>
+            </View>
+          ) : null}
           <View style={styles.priceRow}>
-            <Text style={styles.priceAmount}>{plan === 'Monthly' ? '₹999' : '₹9,999'}</Text>
+            <Text style={styles.priceAmount}>{displayPrice}</Text>
             <Text style={styles.pricePeriod}>/{plan === 'Monthly' ? 'month' : 'year'}</Text>
           </View>
-          {plan === 'Annual' ? <Text style={styles.priceMonthly}>~₹833/mo</Text> : null}
+          {plan === 'Annual' ? (
+            <Text style={styles.priceMonthly}>~₹333/mo</Text>
+          ) : null}
         </View>
 
-        <PrimaryButton title="UPGRADE TO PRO" onPress={handleUpgrade} style={{ marginTop: 24 }} />
+        <PrimaryButton
+          title={loading ? 'Processing...' : 'UPGRADE TO PRO'}
+          onPress={handleUpgrade}
+          loading={loading}
+          style={{ marginTop: 24 }}
+        />
         <Text style={styles.cancelText}>Cancel anytime</Text>
 
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20, alignItems: 'center' }}>
+        <TouchableOpacity onPress={handleRestore} style={styles.restoreBtn} disabled={restoring}>
+          {restoring ? (
+            <ActivityIndicator size="small" color={Colors.textTertiary} />
+          ) : (
+            <Text style={styles.restoreText}>Restore purchases</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 8, alignItems: 'center' }}>
           <Text style={styles.laterText}>Maybe later</Text>
         </TouchableOpacity>
       </ScrollView>
-
-      {/* Toast */}
-      {toastVisible ? (
-        <View style={styles.toast}>
-          <Text style={styles.toastText}>Pro subscriptions launching soon. We'll notify you!</Text>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -108,7 +171,7 @@ const styles = StyleSheet.create({
   pricePeriod: { fontFamily: FontFamily.plexRegular, fontSize: 15, color: Colors.textSecondary },
   priceMonthly: { fontFamily: FontFamily.plexRegular, fontSize: 13, color: Colors.textSecondary, marginTop: 4 },
   cancelText: { fontFamily: FontFamily.plexRegular, fontSize: 11, color: Colors.textTertiary, textAlign: 'center', marginTop: 8 },
+  restoreBtn: { marginTop: 16, alignItems: 'center', paddingVertical: 8 },
+  restoreText: { fontFamily: FontFamily.plexRegular, fontSize: 13, color: Colors.textTertiary },
   laterText: { fontFamily: FontFamily.plexRegular, fontSize: 13, color: Colors.textTertiary },
-  toast: { position: 'absolute', bottom: 100, left: 20, right: 20, backgroundColor: Colors.surfaceCard, borderWidth: 1, borderColor: Colors.cyan, borderRadius: Radius.md, padding: 14, alignItems: 'center' },
-  toastText: { fontFamily: FontFamily.plexRegular, fontSize: 14, color: Colors.textPrimary },
 });

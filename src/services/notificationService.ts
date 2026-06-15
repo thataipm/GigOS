@@ -3,11 +3,13 @@
 //   npx expo install expo-notifications   (in frontend/)
 // Until then, all functions are safe no-ops.
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { type Gig } from './supabaseData';
 
-// Lazy-load expo-notifications so the module is safe to import
-// even if the package isn't installed yet.
+// Lazy-load expo-notifications — safe no-op in Expo Go (push removed since SDK 53)
+// and if the package isn't installed.
 function getNotifications(): any | null {
+  if (Constants.appOwnership === 'expo') return null;
   try {
     return require('expo-notifications');
   } catch {

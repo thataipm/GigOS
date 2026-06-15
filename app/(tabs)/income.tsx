@@ -94,9 +94,6 @@ export default function IncomeScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.nav}>
         <Text style={styles.navTitle}>Income</Text>
-        <TouchableOpacity onPress={() => router.push('/nudge')}>
-          <MaterialIcons name="notifications-none" size={22} color={Colors.textSecondary} />
-        </TouchableOpacity>
       </View>
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.cyan} />} showsVerticalScrollIndicator={false}>
         {error ? (

@@ -204,6 +204,44 @@ export default function GigDetailScreen() {
     );
   };
 
+  const handleAdvanceStatusChange = (label: string) => {
+    const newStatus = ADV_MAP[label];
+    saveField('advance_status', newStatus);
+    // If marking as requested and no amount set yet, auto-open the amount field
+    if (newStatus === 'requested' && !gig.advance_amount) {
+      setTimeout(() => startEdit('advance_amount', ''), 350);
+    }
+  };
+
+  const handleStageChange = (stageKey: string) => {
+    setStageSheet(false);
+    if (stageKey === gig.pipeline_status) return;
+
+    const updates: Partial<Gig> = { pipeline_status: stageKey };
+
+    // Moving to Advance In → mark advance received
+    if (stageKey === 'advance_received') {
+      if (gig.advance_status !== 'received' && gig.advance_status !== 'waived') {
+        updates.advance_status = 'received';
+      }
+    }
+
+    // Moving to Paid → settle all payment fields
+    if (stageKey === 'paid') {
+      updates.balance_status = 'received';
+      if (gig.advance_status === 'requested' || gig.advance_status === 'not_requested') {
+        updates.advance_status = 'received';
+      }
+    }
+
+    saveFields(updates);
+
+    // If moved to advance_received with no amount, prompt for it after save animates
+    if (stageKey === 'advance_received' && !gig.advance_amount) {
+      setTimeout(() => startEdit('advance_amount', ''), 500);
+    }
+  };
+
   const openWhatsApp = () => {
     const phone = gig.promoter_phone?.replace(/\s/g, '').replace('+', '');
     if (!phone) {
@@ -314,7 +352,7 @@ export default function GigDetailScreen() {
             <SegmentedControl
               options={ADV_LABELS}
               value={ADV_REVERSE[gig.advance_status] || 'Not Requested'}
-              onChange={(v) => saveField('advance_status', ADV_MAP[v])}
+              onChange={handleAdvanceStatusChange}
             />
             {(gig.advance_status === 'requested' || gig.advance_status === 'not_requested') && gig.pipeline_status !== 'paid' ? (
               <PrimaryButton title="💬 Chase on WhatsApp" onPress={openWhatsApp} variant="whatsapp" style={{ marginTop: 12 }} />
@@ -379,7 +417,6 @@ export default function GigDetailScreen() {
               />
             ) : null}
             <EditableRow icon="place" label="VENUE" displayValue={gig.venue_name || '—'} onPress={() => startEdit('venue_name', gig.venue_name || '')} editField={editField} editValue={editValue} setEditValue={setEditValue} commitEdit={() => commitEdit('venue_name')} field="venue_name" />
-            <EditableRow icon="music-note" label="GENRE" displayValue={gig.genre || '—'} onPress={() => startEdit('genre', gig.genre || '')} editField={editField} editValue={editValue} setEditValue={setEditValue} commitEdit={() => commitEdit('genre')} field="genre" />
           </View>
 
           {/* ── Rider & Logistics ── */}
@@ -497,7 +534,7 @@ export default function GigDetailScreen() {
               <Pressable style={[s.sheet, { paddingHorizontal: 20, paddingBottom: insets.bottom + 20 }]} onPress={() => {}}>
                 <View style={s.sheetHandle} />
                 <Text style={s.sheetTitle}>Add Expense</Text>
-                <Text style={[s.detailLabel, { marginBottom: 6 }]}>AMOUNT (₹)</Text>
+                <Text style={[s.detailLabel, { marginBottom: 6 }]}>AMOUNT ({currency === 'USD' ? '$' : '₹'})</Text>
                 <TextInput
                   style={s.expInput}
                   value={expAmount}
@@ -544,7 +581,7 @@ export default function GigDetailScreen() {
               <View style={s.sheetHandle} />
               <Text style={s.sheetTitle}>Move to Stage</Text>
               {STAGES.map(st => (
-                <TouchableOpacity key={st.key} testID={`stage-${st.key}`} onPress={() => { saveField('pipeline_status', st.key); setStageSheet(false); }} style={s.stageRow}>
+                <TouchableOpacity key={st.key} testID={`stage-${st.key}`} onPress={() => handleStageChange(st.key)} style={s.stageRow}>
                   <View style={[s.stageDot, { backgroundColor: st.color }]} />
                   <View style={{ flex: 1 }}>
                     <Text style={s.stageName}>{st.label}</Text>

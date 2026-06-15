@@ -1,11 +1,11 @@
 // GigOS Expenses — Track costs against gigs
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal,
   TextInput, Pressable, Alert, ActivityIndicator, RefreshControl, KeyboardAvoidingView, Platform
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { getExpenses, createExpense, deleteExpense, getGigs, type Expense, type Gig } from '@/src/services/supabaseData';
 import { Colors } from '@/src/theme/colors';
 import { FontFamily } from '@/src/theme/typography';
@@ -54,7 +54,6 @@ export default function ExpensesScreen() {
   const [addGigId, setAddGigId] = useState<string | null>(null);
   const [addSaving, setAddSaving] = useState(false);
   const [addError, setAddError] = useState('');
-
   const load = useCallback(async () => {
     try {
       const [data, gigData] = await Promise.all([getExpenses(), getGigs()]);
@@ -68,7 +67,7 @@ export default function ExpensesScreen() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const gigMap = useMemo(() => Object.fromEntries(gigs.map(g => [g.id, g.event_name])), [gigs]);

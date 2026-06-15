@@ -22,7 +22,9 @@ export default function ForgotPasswordScreen() {
     if (!email.trim()) { setError('Please enter your email address.'); return; }
     setError('');
     setLoading(true);
-    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim());
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: 'gigos://reset-password',
+    });
     setLoading(false);
     if (err) {
       setError('Could not send reset email. Check the address and try again.');
@@ -42,7 +44,12 @@ export default function ForgotPasswordScreen() {
             <MaterialIcons name="check" size={40} color={Colors.textOnAccent} />
           </View>
           <Text style={styles.successTitle}>Check your inbox</Text>
-          <Text style={styles.successSub}>We sent a password reset link to{'\n'}{email}</Text>
+          <Text style={styles.successSub}>
+            We sent a reset link to{'\n'}<Text style={{ color: Colors.cyan }}>{email}</Text>
+          </Text>
+          <Text style={styles.successHint}>
+            Open the email and tap the link — it will bring you back into GigOS where you can set a new password.
+          </Text>
           <TouchableOpacity onPress={() => router.replace('/login')} style={styles.loginLink}>
             <Text style={styles.loginLinkText}>Back to Sign In</Text>
           </TouchableOpacity>
@@ -92,6 +99,7 @@ const styles = StyleSheet.create({
   checkCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.green, alignItems: 'center', justifyContent: 'center', shadowColor: Colors.green, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 16, elevation: 8 },
   successTitle: { fontFamily: FontFamily.sairaBold, fontSize: 24, color: Colors.textPrimary, marginTop: 8 },
   successSub: { fontFamily: FontFamily.plexRegular, fontSize: 15, color: Colors.textSecondary, textAlign: 'center', lineHeight: 22 },
+  successHint: { fontFamily: FontFamily.plexRegular, fontSize: 13, color: Colors.textTertiary, textAlign: 'center', lineHeight: 20, paddingHorizontal: 16 },
   loginLink: { marginTop: 24, paddingVertical: 8 },
   loginLinkText: { fontFamily: FontFamily.plexRegular, fontSize: 14, color: Colors.cyan },
 });

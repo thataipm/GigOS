@@ -46,21 +46,22 @@ export default function AnalyticsScreen() {
     if (gigs.length === 0) return null;
     const now = new Date();
 
-    // ── Summary stats ──
-    const totalRevenue = gigs.reduce((s, g) => s + (g.fee || 0), 0);
-    const received = gigs.reduce((s, g) => {
+    // ── Summary stats (exclude enquiries — unconfirmed, no agreed fee) ──
+    const billable = gigs.filter(g => g.pipeline_status !== 'enquiry');
+    const totalRevenue = billable.reduce((s, g) => s + (g.fee || 0), 0);
+    const received = billable.reduce((s, g) => {
       if (g.balance_status === 'received') return s + (g.fee || 0);
       if (g.advance_status === 'received') return s + (g.advance_amount || 0);
       return s;
     }, 0);
-    const outstanding = gigs
+    const outstanding = billable
       .filter(g => g.balance_status !== 'received')
       .reduce((s, g) => {
         if (g.advance_status === 'received') return s + ((g.fee || 0) - (g.advance_amount || 0));
         return s + (g.fee || 0);
       }, 0);
-    const avgFee = gigs.filter(g => g.fee).length > 0
-      ? Math.round(totalRevenue / gigs.filter(g => g.fee).length)
+    const avgFee = billable.filter(g => g.fee).length > 0
+      ? Math.round(totalRevenue / billable.filter(g => g.fee).length)
       : 0;
     const collectionRate = totalRevenue > 0 ? Math.round((received / totalRevenue) * 100) : 0;
 
@@ -78,7 +79,7 @@ export default function AnalyticsScreen() {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const y = d.getFullYear();
       const m = d.getMonth();
-      const val = gigs
+      const val = billable
         .filter(g => { const gd = new Date(g.date); return gd.getFullYear() === y && gd.getMonth() === m; })
         .reduce((s, g) => s + (g.fee || 0), 0);
       monthlyData.push({ label: MONTHS_SHORT[m], value: val, isCurrent: i === 0 });

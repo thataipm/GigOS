@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sairaSemiBold,
     fontSize: 15,
     lineHeight: 15 * 1.3,
-    color: Colors.textSecondary,
+    color: Colors.textPrimary,
     marginTop: 2,
   },
   typePill: {

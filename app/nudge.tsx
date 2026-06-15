@@ -13,6 +13,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 type Nudge = { venue: string; promoterName: string; promoterPhone: string; weeksAgo: number; lastDate: string; };
 
+
 const DISMISSED_KEY = 'nudge_dismissed';
 const SNOOZED_KEY = 'nudge_snoozed';
 
@@ -20,6 +21,7 @@ export default function NudgeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [nudges, setNudges] = useState<Nudge[]>([]);
+  const [hasGigs, setHasGigs] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [snoozed, setSnoozed] = useState<Map<string, number>>(new Map());
 
@@ -32,6 +34,7 @@ export default function NudgeScreen() {
       if (rawSnoozed) setSnoozed(new Map(Object.entries(JSON.parse(rawSnoozed))));
 
       const { gigs } = await getDJData();
+      setHasGigs(gigs.length > 0);
       const now = new Date();
       const venueMap: Record<string, Gig[]> = {};
       gigs.forEach(g => { if (g.venue_name) { (venueMap[g.venue_name] = venueMap[g.venue_name] || []).push(g); } });
@@ -87,9 +90,19 @@ export default function NudgeScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {visible.length === 0 ? (
           <View style={styles.empty}>
-            <MaterialIcons name="notifications-none" size={48} color={Colors.textTertiary} />
-            <Text style={styles.emptyTitle}>No follow-ups needed</Text>
-            <Text style={styles.emptySub}>All venues are recently booked.</Text>
+            {hasGigs ? (
+              <>
+                <MaterialIcons name="check-circle" size={48} color={Colors.green} />
+                <Text style={styles.emptyTitle}>All caught up</Text>
+                <Text style={styles.emptySub}>No venues need following up right now. Check back after your upcoming gigs.</Text>
+              </>
+            ) : (
+              <>
+                <MaterialIcons name="notifications-none" size={48} color={Colors.textTertiary} />
+                <Text style={styles.emptyTitle}>Follow-up reminders</Text>
+                <Text style={styles.emptySub}>Once you log gigs, GigOS will remind you to reach back out to venues you haven't played at in a while.</Text>
+              </>
+            )}
           </View>
         ) : visible.map(n => (
           <View key={n.venue} style={styles.card}>

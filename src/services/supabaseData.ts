@@ -23,6 +23,16 @@ export type DJProfile = {
   gstin: string | null;
   business_address: string | null;
   push_token: string | null;
+  // Monetization
+  is_pro: boolean;
+  plan: string;
+  plan_expires_at: string | null;
+  rc_customer_id: string | null;
+  // Artist type
+  artist_type: string;
+  // Profile media
+  avatar_url: string | null;
+  bio: string | null;
   created_at: string;
 };
 
@@ -276,17 +286,16 @@ export async function uploadGigDocument(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  // Use fetch to get file as blob — works with Expo file:// URIs
   const response = await fetch(fileUri);
-  const blob = await response.blob();
+  const arrayBuffer = await response.arrayBuffer();
 
   const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `${user.id}/${gigId}/${Date.now()}_${safeFileName}`;
 
   const { error: storageError } = await supabase.storage
     .from('gig-documents')
-    .upload(storagePath, blob, {
-      contentType: fileType || blob.type || 'application/octet-stream',
+    .upload(storagePath, arrayBuffer, {
+      contentType: fileType || 'application/octet-stream',
     });
 
   if (storageError) throw new Error(storageError.message);
@@ -299,7 +308,7 @@ export async function uploadGigDocument(
       file_name: fileName,
       storage_path: storagePath,
       file_type: fileType ?? null,
-      file_size: fileSize ?? blob.size ?? null,
+      file_size: fileSize ?? arrayBuffer.byteLength ?? null,
     })
     .select('*')
     .single();
@@ -314,6 +323,30 @@ export async function deleteGigDocument(documentId: string, storagePath: string)
   // Delete record
   const { error } = await supabase.from('gig_documents').delete().eq('id', documentId);
   if (error) throw new Error(error.message);
+}
+
+export async function uploadAvatar(uri: string): Promise<string | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const response = await fetch(uri);
+  const arrayBuffer = await response.arrayBuffer();
+  const ext = uri.split('.').pop()?.toLowerCase().split('?')[0] || 'jpg';
+  const path = `${user.id}/avatar.${ext}`;
+
+  const { error } = await supabase.storage
+    .from('avatars')
+    .upload(path, arrayBuffer, {
+      upsert: true,
+      contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+    });
+
+  if (error) throw new Error(error.message);
+
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+  const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
+  await updateDJProfile({ avatar_url: publicUrl });
+  return publicUrl;
 }
 
 export async function getGigDocumentUrl(storagePath: string): Promise<string | null> {

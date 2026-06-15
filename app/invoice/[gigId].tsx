@@ -15,9 +15,9 @@ function formatDate(d: string) {
 }
 
 function invoiceNumber(gig: Gig): string {
-  const now = new Date();
-  const yr = now.getFullYear().toString().slice(-2);
-  const mo = String(now.getMonth() + 1).padStart(2, '0');
+  const d = new Date(gig.date + 'T00:00:00');
+  const yr = d.getFullYear().toString().slice(-2);
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
   return `GOS-${yr}${mo}-${gig.id.slice(-4).toUpperCase()}`;
 }
 
