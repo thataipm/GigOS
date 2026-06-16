@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { Colors } from '@/src/theme/colors';
 import { FontFamily } from '@/src/theme/typography';
-import { Layout, Radius } from '@/src/theme/spacing';
+import { Layout } from '@/src/theme/spacing';
 import { GigOSInput, PrimaryButton } from '@/src/components';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -14,47 +14,67 @@ export default function ForgotPasswordScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [step, setStep] = useState<'email' | 'otp'>('email');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [sent, setSent] = useState(false);
 
-  const handleReset = async () => {
+  const handleSend = async () => {
     if (!email.trim()) { setError('Please enter your email address.'); return; }
     setError('');
     setLoading(true);
-    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: 'gigos://reset-password',
-    });
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim());
     setLoading(false);
     if (err) {
       setError('Could not send reset email. Check the address and try again.');
     } else {
-      setSent(true);
+      setStep('otp');
     }
   };
 
-  if (sent) {
+  const handleVerify = async () => {
+    if (otp.trim().length !== 8) { setError('Enter the 8-digit code from your email.'); return; }
+    setError('');
+    setLoading(true);
+    const { error: err } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: otp.trim(),
+      type: 'recovery',
+    });
+    setLoading(false);
+    if (err) {
+      setError('Invalid or expired code. Try requesting a new one.');
+    } else {
+      router.replace('/reset-password');
+    }
+  };
+
+  if (step === 'otp') {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <MaterialIcons name="chevron-left" size={28} color={Colors.cyan} />
-        </TouchableOpacity>
-        <View style={styles.successWrap}>
-          <View style={styles.checkCircle}>
-            <MaterialIcons name="check" size={40} color={Colors.textOnAccent} />
-          </View>
-          <Text style={styles.successTitle}>Check your inbox</Text>
-          <Text style={styles.successSub}>
-            We sent a reset link to{'\n'}<Text style={{ color: Colors.cyan }}>{email}</Text>
-          </Text>
-          <Text style={styles.successHint}>
-            Open the email and tap the link — it will bring you back into GigOS where you can set a new password.
-          </Text>
-          <TouchableOpacity onPress={() => router.replace('/login')} style={styles.loginLink}>
-            <Text style={styles.loginLinkText}>Back to Sign In</Text>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <TouchableOpacity onPress={() => { setStep('email'); setError(''); setOtp(''); }} style={styles.backBtn}>
+            <MaterialIcons name="chevron-left" size={28} color={Colors.cyan} />
           </TouchableOpacity>
-        </View>
-      </View>
+          <Text style={styles.heading}>Check your email</Text>
+          <Text style={styles.subtext}>
+            We sent an 8-digit code to{'\n'}<Text style={{ color: Colors.cyan }}>{email}</Text>
+          </Text>
+          <GigOSInput
+            label="RESET CODE"
+            value={otp}
+            onChangeText={t => setOtp(t.replace(/\D/g, '').slice(0, 8))}
+            keyboardType="number-pad"
+            placeholder="00000000"
+            containerStyle={{ marginTop: 32 }}
+          />
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <PrimaryButton title="VERIFY CODE" onPress={handleVerify} loading={loading} style={{ marginTop: 24 }} />
+          <TouchableOpacity onPress={() => { setStep('email'); setError(''); setOtp(''); }} style={styles.cancelRow}>
+            <Text style={styles.cancelText}>Use a different email</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -65,7 +85,7 @@ export default function ForgotPasswordScreen() {
           <MaterialIcons name="chevron-left" size={28} color={Colors.cyan} />
         </TouchableOpacity>
         <Text style={styles.heading}>Forgot password?</Text>
-        <Text style={styles.subtext}>Enter your email and we'll send a reset link.</Text>
+        <Text style={styles.subtext}>Enter your email and we'll send an 8-digit reset code.</Text>
         <GigOSInput
           label="EMAIL"
           value={email}
@@ -77,7 +97,7 @@ export default function ForgotPasswordScreen() {
           containerStyle={{ marginTop: 32 }}
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <PrimaryButton title="SEND RESET LINK" onPress={handleReset} loading={loading} style={{ marginTop: 24 }} />
+        <PrimaryButton title="SEND RESET CODE" onPress={handleSend} loading={loading} style={{ marginTop: 24 }} />
         <TouchableOpacity onPress={() => router.back()} style={styles.cancelRow}>
           <Text style={styles.cancelText}>Back to Sign In</Text>
         </TouchableOpacity>
@@ -95,11 +115,4 @@ const styles = StyleSheet.create({
   error: { fontFamily: FontFamily.plexRegular, fontSize: 13, color: Colors.red, marginTop: 8 },
   cancelRow: { alignItems: 'center', marginTop: 16, paddingVertical: 8 },
   cancelText: { fontFamily: FontFamily.plexRegular, fontSize: 14, color: Colors.textTertiary },
-  successWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
-  checkCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.green, alignItems: 'center', justifyContent: 'center', shadowColor: Colors.green, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 16, elevation: 8 },
-  successTitle: { fontFamily: FontFamily.sairaBold, fontSize: 24, color: Colors.textPrimary, marginTop: 8 },
-  successSub: { fontFamily: FontFamily.plexRegular, fontSize: 15, color: Colors.textSecondary, textAlign: 'center', lineHeight: 22 },
-  successHint: { fontFamily: FontFamily.plexRegular, fontSize: 13, color: Colors.textTertiary, textAlign: 'center', lineHeight: 20, paddingHorizontal: 16 },
-  loginLink: { marginTop: 24, paddingVertical: 8 },
-  loginLinkText: { fontFamily: FontFamily.plexRegular, fontSize: 14, color: Colors.cyan },
 });
