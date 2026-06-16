@@ -507,10 +507,18 @@ export default function GigDetailScreen() {
         {gig.pipeline_status !== 'enquiry' ? (
           <View style={[s.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
             {gig.balance_status === 'received' || gig.pipeline_status === 'paid' ? (
-              <View style={s.receivedBar}>
+              <TouchableOpacity
+                style={s.receivedBar}
+                onPress={() => {
+                  const updates: Partial<Gig> = { balance_status: 'not_received' };
+                  if (gig.pipeline_status === 'paid') updates.pipeline_status = 'done';
+                  saveFields(updates);
+                }}
+              >
                 <MaterialIcons name="check-circle" size={18} color={Colors.green} />
                 <Text style={s.receivedText}>Balance Received ✓</Text>
-              </View>
+                <MaterialIcons name="undo" size={14} color={Colors.textTertiary} style={{ marginLeft: 8 }} />
+              </TouchableOpacity>
             ) : (
               <PrimaryButton
                 title="Mark Balance Received"

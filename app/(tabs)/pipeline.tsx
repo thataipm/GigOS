@@ -43,12 +43,18 @@ export default function PipelineScreen() {
     try {
       const { profile: p, gigs: g } = await getDJData();
       setProfile(p); setGigs(g); setError('');
-      // Auto-collapse empty pipeline stages once on first load
-      if (!autoCollapsedRef.current) {
-        autoCollapsedRef.current = true;
-        const occupied = new Set(g.map(gig => gig.pipeline_status));
-        setCollapsed(new Set(COLUMNS.map(c => c.key).filter(k => !occupied.has(k))));
-      }
+      const occupied = new Set(g.map(gig => gig.pipeline_status));
+      setCollapsed(prev => {
+        const next = new Set(prev);
+        // Always expand sections that now have gigs (catches gigs moved from another stage)
+        occupied.forEach(k => next.delete(k));
+        // Auto-collapse empty sections on first load only
+        if (!autoCollapsedRef.current) {
+          autoCollapsedRef.current = true;
+          COLUMNS.map(c => c.key).filter(k => !occupied.has(k)).forEach(k => next.add(k));
+        }
+        return next;
+      });
     } catch {
       setError('Could not load your gigs. Pull down to retry.');
     } finally {

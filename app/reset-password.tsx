@@ -46,6 +46,22 @@ export default function ResetPasswordScreen() {
         refreshToken = p.get('refresh_token');
       }
 
+      // PKCE fallback: Supabase v2 sends ?code= instead of #access_token=
+      if (!accessToken) {
+        const query = (url.split('?')[1] ?? '').split('#')[0];
+        const code = new URLSearchParams(query).get('code');
+        if (code) {
+          const { data, error: codeErr } = await supabase.auth.exchangeCodeForSession(code);
+          settled.current = true;
+          if (codeErr || !data.session) {
+            setTokenError('Reset link has expired. Please request a new one.');
+          } else {
+            setSessionReady(true);
+          }
+          return;
+        }
+      }
+
       if (!accessToken || !refreshToken) {
         settled.current = true;
         setTokenError('Invalid or expired reset link. Please request a new one.');
