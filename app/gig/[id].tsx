@@ -510,7 +510,7 @@ export default function GigDetailScreen() {
               <TouchableOpacity
                 style={s.receivedBar}
                 onPress={() => {
-                  const updates: Partial<Gig> = { balance_status: 'not_received' };
+                  const updates: Partial<Gig> = { balance_status: 'pending' };
                   if (gig.pipeline_status === 'paid') updates.pipeline_status = 'done';
                   saveFields(updates);
                 }}
