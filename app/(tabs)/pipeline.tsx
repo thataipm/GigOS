@@ -62,11 +62,11 @@ export default function PipelineScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const pendingAdvances = gigs.filter(g =>
-    (g.advance_status === 'requested' || g.advance_status === 'not_requested') &&
+    g.advance_status === 'requested' &&
     g.pipeline_status !== 'paid'
   );
   const pendingTotal = pendingAdvances.reduce((sum, g) => sum + (g.advance_amount ?? 0), 0);

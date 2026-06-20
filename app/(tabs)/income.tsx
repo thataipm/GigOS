@@ -74,7 +74,7 @@ export default function IncomeScreen() {
     return true;
   });
   const totalExpenses = filteredExpenses.reduce((s, e) => s + e.amount, 0);
-  const netIncome = total - totalExpenses;
+  const netIncome = received - totalExpenses;
 
   // Monthly chart data (exclude enquiries)
   const monthlyData = MONTHS.map((_, i) => {
