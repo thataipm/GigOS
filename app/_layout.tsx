@@ -9,11 +9,14 @@ import { useFonts } from 'expo-font';
 import { useIconFonts } from '@/src/hooks/use-icon-fonts';
 import { Colors } from '@/src/theme/colors';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
+import { configureNotifications, setupAndroidChannel } from '@/src/services/notificationService';
 import { Saira_400Regular, Saira_600SemiBold, Saira_700Bold } from '@expo-google-fonts/saira';
 import { IBMPlexSans_400Regular, IBMPlexSans_500Medium, IBMPlexSans_600SemiBold, IBMPlexSans_700Bold } from '@expo-google-fonts/ibm-plex-sans';
 import { IBMPlexMono_400Regular, IBMPlexMono_500Medium } from '@expo-google-fonts/ibm-plex-mono';
 
 SplashScreen.preventAutoHideAsync();
+configureNotifications();
+setupAndroidChannel();
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();

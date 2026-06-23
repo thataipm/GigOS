@@ -99,6 +99,7 @@ export async function scheduleGigNotifications(gig: Gig): Promise<void> {
           body,
           data: { gigId: gig.id },
           sound: 'default',
+          ...(Platform.OS === 'android' ? { channelId: 'gig-reminders' } : {}),
         },
         trigger: { seconds: secondsUntil, repeats: false },
       });
