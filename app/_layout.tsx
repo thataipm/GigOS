@@ -25,10 +25,10 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
-    const inAuthGroup = segments[0] === 'login' || segments[0] === 'signup' || segments[0] === 'onboarding' || segments[0] === 'forgot-password' || segments[0] === 'reset-password' || segments[0] === 'verify-email' || segments[0] === 'privacy-policy';
+    const inAuthGroup = segments[0] === 'welcome' || segments[0] === 'login' || segments[0] === 'signup' || segments[0] === 'onboarding' || segments[0] === 'forgot-password' || segments[0] === 'reset-password' || segments[0] === 'verify-email' || segments[0] === 'privacy-policy';
     const isIndex = segments.length === 0 || segments[0] === undefined;
     if (!session && !inAuthGroup && !isIndex) {
-      router.replace('/login');
+      router.replace('/welcome');
     }
   }, [session, loading, segments]);
 
@@ -65,6 +65,7 @@ export default function RootLayout() {
             <StatusBar style="light" backgroundColor={Colors.surfaceApp} />
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.surfaceApp }, animation: 'fade', animationDuration: 200 }}>
               <Stack.Screen name="index" />
+              <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
               <Stack.Screen name="login" />
               <Stack.Screen name="signup" />
               <Stack.Screen name="onboarding" />
